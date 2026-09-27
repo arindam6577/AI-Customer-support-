@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: support
+      POSTGRES_USER: support
+      POSTGRES_PASSWORD: support
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+  n8n:
+    image: n8nio/n8n:latest
+    ports: ["5678:5678"]
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: support
+      DB_POSTGRESDB_USER: support
+      DB_POSTGRESDB_PASSWORD: support
+      N8N_SECURE_COOKIE: "false"
+    depends_on: [postgres]
+    volumes: ["n8n_data:/home/node/.n8n"]
+volumes:
+  postgres_data:
+  n8n_data:

@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  AGENT
+  CUSTOMER
+}
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+enum TicketStatus {
+  NEW
+  AI_PROCESSING
+  OPEN
+  ASSIGNED
+  WAITING_FOR_CUSTOMER
+  IN_PROGRESS
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+enum TicketSource {
+  EMAIL
+  WEB_FORM
+  CHAT
+  SLACK
+  SOCIAL_MEDIA
+  API
+}
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String
+  role Role @default(CUSTOMER)
+  teamId String?
+  team Team? @relation(fields: [teamId], references: [id])
+  agent Agent?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  auditLogs AuditLog[]
+}
+model Team {
+  id String @id @default(cuid())
+  name String @unique
+  description String
+  users User[]
+  agents Agent[]
+  tickets Ticket[] @relation("AssignedTeam")
+  createdAt DateTime @default(now())
+}
+model Agent {
+  id String @id @default(cuid())
+  userId String @unique
+  teamId String
+  availabilityStatus AvailabilityStatus @default(AVAILABLE)
+  activeTicketCount Int @default(0)
+  maxTicketCapacity Int @default(20)
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id])
+  tickets Ticket[] @relation("AssignedAgent")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model Customer {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  phone String?
+  company String?
+  tickets Ticket[]
+  feedback Feedback[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model Ticket {
+  id String @id @default(cuid())
+  ticketNumber String @unique
+  customerId String
+  subject String
+  description String
+  source TicketSource
+  category String @default("General Query")
+  priority TicketPriority @default(MEDIUM)
+  sentiment String @default("NEUTRAL")
+  status TicketStatus @default(NEW)
+  assignedAgentId String?
+  assignedTeamId String?
+  aiConfidence Float?
+  duplicateProbability Float?
+  duplicateOfId String?
+  humanApprovalRequired Boolean @default(false)
+  aiResponseApproved Boolean @default(false)
+  slaDeadline DateTime?
+  resolutionTimeMinutes Int?
+  firstResponseAt DateTime?
+  resolvedAt DateTime?
+  customer Customer @relation(fields: [customerId], references: [id])
+  assignedAgent Agent? @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
+  assignedTeam Team? @relation("AssignedTeam", fields: [assignedTeamId], references: [id])
+  duplicateOf Ticket? @relation("TicketDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates Ticket[] @relation("TicketDuplicates")
+  messages TicketMessage[]
+  events TicketEvent[]
+  aiAnalyses AIAnalysis[]
+  escalations Escalation[]
+  feedback Feedback[]
+  notifications Notification[]
+  automationExecutions AutomationExecution[]
+  slaRecord SLARecord?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model KnowledgeBase {
+  id String @id @default(cuid())
+  title String
+  content String
+  category String
+  keywords String
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model TicketMessage {
+  id String @id @default(cuid())
+  ticketId String
+  senderType String
+  senderId String?
+  message String
+  channel String
+  aiGenerated Boolean @default(false)
+  createdAt DateTime @default(now())
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+}
+model TicketEvent {
+  id String @id @default(cuid())
+  ticketId String
+  eventType String
+  description String
+  metadata String?
+  createdAt DateTime @default(now())
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+}
+model SLA {
+  id String @id @default(cuid())
+  priority TicketPriority @unique
+  firstResponseMinutes Int
+  resolutionMinutes Int
+}
+model SLARecord {
+  id String @id @default(cuid())
+  ticketId String @unique
+  firstResponseDeadline DateTime
+  resolutionDeadline DateTime
+  firstResponseAt DateTime?
+  breachedAt DateTime?
+  riskLevel String @default("ON_TRACK")
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+}
+model Escalation {
+  id String @id @default(cuid())
+  ticketId String
+  reason String
+  escalatedTo String
+  status String @default("OPEN")
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+}
+model Feedback {
+  id String @id @default(cuid())
+  ticketId String
+  customerId String
+  rating Int
+  comment String?
+  sentiment String?
+  createdAt DateTime @default(now())
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+}
+model Notification {
+  id String @id @default(cuid())
+  ticketId String?
+  recipient String
+  channel String
+  subject String
+  message String
+  status String @default("PENDING")
+  sentAt DateTime?
+  ticket Ticket? @relation(fields: [ticketId], references: [id])
+}
+model AIAnalysis {
+  id String @id @default(cuid())
+  ticketId String
+  category String
+  priority TicketPriority
+  sentiment String
+  confidence Float
+  summary String
+  recommendedTeam String
+  recommendedResponse String
+  duplicateProbability Float
+  reasoning String?
+  createdAt DateTime @default(now())
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+}
+model AutomationExecution {
+  id String @id @default(cuid())
+  workflowName String
+  ticketId String?
+  status String
+  executionId String?
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  errorMessage String?
+  ticket Ticket? @relation(fields: [ticketId], references: [id])
+}
+model AuditLog {
+  id String @id @default(cuid())
+  userId String?
+  action String
+  entity String
+  entityId String
+  metadata String?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id])
+}
